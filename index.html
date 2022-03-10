@@ -1,0 +1,135 @@
+<!DOCTYPE html><!--*- markdown -*--><meta charset=utf-8><pre markdown>
+Date: 2022-02-25 03:09
+Author: zrajm
+
+Pixel-Perfect Tesseracting
+==========================
+Tesseract cannot be fed a PDF, but, being fed images it outputs single page
+PDFs. So when OCR:ing an old scanned document I usually do the following.
+
+  1. Split the original PDF into individual pages in image format.
+  2. Tesseract each individual page (resulting in single page PDFs).
+  3. Concatenate the PDFs into a single document.
+  4. (Optionally) Set or copy metadata from original document.
+
+To convert the PDF to PNG with the correct aspect.
+
+With older scanned documents PDFs just extracting the images usually work, but
+the aspect is slightly wrong making the output PDFs be in some non-standard
+aspect.
+
+  | A4 | @200 DPI | 1654x2339 pixels |
+
+
+Breaking a PDF into Pages with ImageMagick
+------------------------------------------
+First you'll need to know the 'density' (ie DPI) of PDF. One would expect to
+find this by reading the PDF metadata, `exiftool document.pdf`, but usually
+that information can't be found there, instead try:
+
+    pdfimages -list document.pdf
+
+This will list all the images in the document, and those usually DO contain DPI
+info! Look at the 'x-ppi' and 'y-ppi' columns below. (PPI = pixels per inch.)
+
+    page   num  type   width height color comp bpc  enc interp  object ID x-ppi y-ppi size ratio
+    --------------------------------------------------------------------------------------------
+       1     0 image    1664  2336  gray    1   1  ccitt  no         1  0   200   201 9648B 2.0%
+       2     1 image    1664  2336  gray    1   1  ccitt  no         5  0   200   201 8960B 1.8%
+    ...
+
+Now you can convert the PDF to a series of PNGs using ImageMagick;
+
+    convert -density 200 document.pdf out.png
+
+But, for large documents, this is slow (and might even crash) since ImageMagick
+insists on loading the whole PDF document using `gv` (GhostScript). In those
+cases, first split the PDF into individual pages, and process each page
+separately (since `pdftk` is a pretty fast tool, this is often much faster than
+the above command).
+
+    pdftk document.pdf burst output out-%03d.pdf
+    for FILE (out-???.pdf) { convert -density 200 $FILE ${FILE:r}.png }
+
+
+Breaking a PDF into Pages with PDFImages
+----------------------------------------
+Rather than using ImageMagick (which can apply all kinds of scaling and other
+manipulations so that I'm never fully confident that I haven't destroyed some
+information) I usually use `pdfimages`, to extract the raw image data from the
+PDF (note that not all images have the same format -- as the format is the same
+as the file that was embedded in the PDF to begin with).
+
+    pdfimages -j document.pdf out
+
+However, I have found that even for old scanned documents, the size of the
+images do not necessarily correspond to the size of the pages, meaning that
+after I've tesseracted my images, and put them back together in a single PDF
+again, the final PDF have weeird page sizes. :(
+
+To avoid I usually extract a single page with ImageMagick, verify that it looks
+the same as the corresponding page I got with `pdfimages` (note that the files
+outputted by `pdfimage` are numbered from zero, while ImageMagick start
+counting at one). Then I use ImageMagick to adjust the margins of the files I
+extracted with `pdfimages`, like so (the weird '[0]', which needs to be quoted,
+tells ImageMagick to only extract the first page of the PDF):
+
+    convert -density 200 'out-001.pdf[0]' out-001.png
+
+Or, you can also first 'burst' the PDF into pages, then convert the page you're
+interested in:
+
+    pdftk document.pdf burst output out-%03d.pdf
+    convert -density 200 'out-001.pdf' out-001.png
+
+With the page extracted, have a look at the page dimensions. These are prolly
+the ones you want in your final tesseracted document. (I use `feh` below, but
+there's probably a hundred ways of just getting the image size, heck, even
+`file` or `identify` will do the job for you).
+
+    feh -l out-001.png
+    NUM     FORMAT  WIDTH   HEIGHT  PIXELS  SIZE    ALPHA   FILENAME
+    1       png     1654    2339      4M     34k    X       imagemagick-001.png
+
+Awright, now extract those images, and then resize (without scaling!) them into
+something reasonable. (This might not be a very good idea if you have
+destructively compressed images -- ie JPEGs -- since they'll be recompressed
+with bad results.)
+
+    pdfimages -j document.pdf out
+    for FILE (pdfimages-0*.pbm) { convert -size 1654x2339 xc:white $FILE \
+        -gravity southwest -composite resized-${FILE:r}.png }
+
+And finally run the files through Tesseract, and concatenate them into
+document.
+
+    for FILE (resized-*) { tesseract --dpi 300 -l swe $FILE ${FILE:r} pdf }
+    pdftk resized-*.pdf output newdocument.pdf compress
+
+You can verify the page sizes of your original and newly produced file using:
+
+    pdfinfo document.pdf
+    pdfinfo newdocument.pdf
+
+
+Setting Some Metadata
+---------------------
+Finally, some metadata is nice to have, I usually set the author, title and
+copyright year:
+
+    exiftool -author='Lars Wallin' \
+      -title='Sammansatta tecken i svenska teckenspråket' \
+      -copyright=1982 \
+      newdocument.pdf
+
+All done now!
+
+    for x (**/*.pdf(.)) {
+        y="${x:h}/.${x:t:r}.txt"
+        [[ -e $y ]] && continue
+        echo $x
+        pdfgrep --color=never -o '.*' $x B >$y
+    }
+
+</pre><script src=zr.js></script>
+<!--[eof]-->
