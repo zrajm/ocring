@@ -1,14 +1,28 @@
 <!DOCTYPE html><meta charset=utf-8><!--*- markdown -*-->
 <link rel=stylesheet href=www/nojs.css><textarea disabled>
 
-Created: 2022-02-25 03:09
-Updated: 2025-07-10T13:14:33+02:00
 Author: zrajm
+Created: 2022-02-25 03:09
+Updated: 2025-07-10T13:29:55+02:00
+License: CC BY-NC-SA (text), GPLv2 (code).
 Favicon: /www/favicon.svg
 
 
 Pixel-Perfect Tesseracting
 ==========================
+
+> I often find myself wanting to add searchable/copy-pastable text to PDF
+> documents. Sometimes to documents I've scanned myself, sometimes to old scans
+> made by other people. This is how I do it.
+>
+> BTW, I'm a command-line based person, using Linux and Zsh. Some of the code
+> examples below *will* contain zsh-isms. If you're using Bash, do yourself a
+> favor and change shells now. :)
+
+<toc heading=Contents class=toc>
+
+-------------------------------------------------------------------------------
+
 Tesseract cannot be fed a PDF, but, being fed images it outputs single page
 PDFs. So when OCR:ing an old scanned document I usually do the following.
 
@@ -61,7 +75,9 @@ the above command).
 
 ```
 pdftk document.pdf burst output out-%03d.pdf
-for FILE (out-???.pdf) { convert -density 200 $FILE ${FILE:r}.png }
+for FILE (out-???.pdf) { 
+  convert -density 200 $FILE ${FILE:r}.png
+}
 ```
 
 
@@ -119,15 +135,19 @@ with bad results.)
 
 ```
 pdfimages -j document.pdf out
-for FILE (pdfimages-0*.pbm) { convert -size 1654x2339 xc:white $FILE \
-    -gravity southwest -composite resized-${FILE:r}.png }
+for FILE (pdfimages-0*.pbm) {
+  convert -size 1654x2339 xc:white $FILE \
+    -gravity southwest -composite resized-${FILE:r}.png
+}
 ```
 
 And finally run the files through Tesseract, and concatenate them into
 document.
 
 ```
-for FILE (resized-*) { tesseract --dpi 300 -l swe $FILE ${FILE:r} pdf }
+for FILE (resized-*) {
+  tesseract --dpi 300 -l swe $FILE ${FILE:r} pdf
+}
 pdftk resized-*.pdf output newdocument.pdf compress
 ```
 
@@ -161,6 +181,8 @@ for x (**/*.pdf(.)) {
     pdfgrep --color=never -o '.*' $x B >$y
 }
 ```
+
+-------------------------------------------------------------------------------
 
 </textarea><script type=module src=www/main.js></script>
 <!--[eof]-->
